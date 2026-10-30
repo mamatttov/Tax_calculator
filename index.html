@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Калькуляция импорта</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Рабочий бланк калькуляции: параметры слева сверху, позиции, таблица, итоги внизу */
+:root {
+  --bg: #f3f5f4;
+  --card: #ffffff;
+  --ink: #17221f;
+  --muted: #5d6b67;
+  --line: #d6dedb;
+  --accent: #0d6e5f;
+  --accent-ink: #ffffff;
+  --profit: #157a3a;
+  --loss: #b42318;
+  --soft: #e8efec;
+  --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111816; --card: #18211e; --ink: #e4ece9; --muted: #93a39e; --line: #2c3a36;
+    --accent: #3fb8a2; --accent-ink: #0b1513; --profit: #5fd08a; --loss: #ff7b6e; --soft: #1f2b28;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111816; --card: #18211e; --ink: #e4ece9; --muted: #93a39e; --line: #2c3a36;
+  --accent: #3fb8a2; --accent-ink: #0b1513; --profit: #5fd08a; --loss: #ff7b6e; --soft: #1f2b28;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font);
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+h1 { font-size: 1.5rem; font-weight: 600; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); margin: 2px 0 0; font-size: .9rem; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); margin: 0 0 12px; font-weight: 600; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px 14px; }
+label.f { display: grid; gap: 4px; font-size: .82rem; color: var(--muted); }
+input[type=text], select {
+  font: 500 .95rem var(--mono); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; min-width: 0;
+}
+input[type=text]:focus, select:focus, button:focus-visible, .chk input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input:disabled { opacity: .45; }
+input.bad { border-color: var(--loss); }
+.checks { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 14px; }
+.chk { display: flex; align-items: center; gap: 7px; font-size: .9rem; cursor: pointer; }
+.chk input { accent-color: var(--accent); width: 16px; height: 16px; }
+.hint { color: var(--muted); font-size: .8rem; margin: 10px 0 0; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+.seg button { border: 0; background: transparent; color: var(--ink); padding: 7px 14px; font: 500 .9rem var(--font); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.row-end { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; justify-content: space-between; margin-top: 12px; }
+.btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 7px; padding: 8px 14px; font: 500 .9rem var(--font); cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.err { color: var(--loss); font-size: .85rem; min-height: 1.2em; }
+.tablebox { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { font-size: .74rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; background: var(--card); }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td:first-child { font-family: var(--font); white-space: normal; min-width: 170px; }
+td.cost { font-weight: 600; }
+td.profit { color: var(--profit); font-weight: 600; }
+td.profit.neg { color: var(--loss); }
+.tag { display: inline-block; font: 600 .68rem var(--font); letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: var(--soft); color: var(--accent); margin-right: 6px; vertical-align: 1px; }
+td .del { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 0 4px; }
+td .del:hover { color: var(--loss); }
+.empty { color: var(--muted); padding: 18px 4px; }
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.tot span { display: block; font-size: .78rem; color: var(--muted); }
+.tot b { font: 500 1.15rem var(--mono); font-variant-numeric: tabular-nums; }
+.tot.big b { font-size: 1.4rem; font-weight: 600; color: var(--accent); }
+.tot.pr b { font-size: 1.4rem; font-weight: 600; color: var(--profit); }
+.tot small { display: block; color: var(--muted); font-size: .78rem; }
+.note { color: var(--muted); font-size: .8rem; }
+.toast { color: var(--profit); font-size: .85rem; }
+@media (prefers-reduced-motion: no-preference) { .btn, .seg button { transition: background .15s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Калькуляция импорта</h1>
+      <p class="sub">Себестоимость, налоги, цена продажи и прибыль по товарам и услугам нерезидентов</p>
+    </div>
+    <button class="btn" id="example" type="button">Загрузить пример Dell</button>
+  </header>
+
+  <section aria-labelledby="h-par">
+    <h2 id="h-par">Параметры сделки</h2>
+    <div class="grid">
+      <label class="f">Валюта
+        <select id="valyuta"><option>USD</option><option>EUR</option><option>CNY</option><option>RUB</option><option>KZT</option><option>KGS</option></select>
+      </label>
+      <label class="f">Курс НБКР, сом за 1<input type="text" id="kurs" inputmode="decimal" placeholder="например 87,5"></label>
+      <label class="f">Доставка до границы, в валюте<input type="text" id="dostavka" inputmode="decimal" value="0"></label>
+      <label class="f">Таможенный сбор, %<input type="text" id="sbor" inputmode="decimal" value="0,4"></label>
+      <label class="f" id="prochie-l">Брокер, склад, прочее<input type="text" id="prochie" inputmode="decimal" value="0"></label>
+      <label class="f">НДС, %<input type="text" id="nds" inputmode="decimal" value="12"></label>
+      <label class="f">Наценка, %<input type="text" id="natsenka" inputmode="decimal" value="10"></label>
+      <label class="f">Налог с выручки, %<input type="text" id="nalog" inputmode="decimal" value="2"></label>
+    </div>
+    <div class="checks">
+      <label class="chk"><input type="checkbox" id="vvalyute" checked> Считать в валюте (без курса)</label>
+      <label class="chk"><input type="checkbox" id="platelshik"> Плательщик НДС (НДС к зачёту)</label>
+      <label class="chk"><input type="checkbox" id="vverh" checked> Округлять цену вверх до целого</label>
+    </div>
+    <p class="hint">Налог с выручки: единый налог или налог с продаж по вашему режиму. Ставки НДС, НДН, пошлины и сбора сверяйте с НК КР.</p>
+  </section>
+
+  <section aria-labelledby="h-add">
+    <h2 id="h-add">Добавить позицию</h2>
+    <div class="seg" role="group" aria-label="Вид позиции">
+      <button type="button" id="vid-tovar" aria-pressed="false">Товар (импорт)</button>
+      <button type="button" id="vid-usluga" aria-pressed="true">Услуга нерезидента</button>
+    </div>
+    <form id="form" class="grid" novalidate>
+      <label class="f" style="grid-column: span 2">Наименование<input type="text" id="naim" autocomplete="off"></label>
+      <label class="f">Количество<input type="text" id="kol" inputmode="decimal" value="1"></label>
+      <label class="f">Цена за ед., в валюте<input type="text" id="tsena" inputmode="decimal"></label>
+      <label class="f">Страна<input type="text" id="strana" list="strany" autocomplete="off"></label>
+      <label class="f tovar">Пошлина, %<input type="text" id="poshlina" inputmode="decimal" value="0"></label>
+      <label class="f tovar">Акциз, %<input type="text" id="akciz" inputmode="decimal" value="0"></label>
+      <label class="f usluga">НДН, %<input type="text" id="ndn" inputmode="decimal" value="10"></label>
+      <label class="chk usluga" style="align-self:end;padding-bottom:8px"><input type="checkbox" id="sverhu" checked> НДН сверху за свой счёт</label>
+    </form>
+    <datalist id="strany"><option>Китай</option><option>Турция</option><option>ОАЭ</option><option>США</option><option>Германия</option><option>Корея</option><option>Индия</option><option>Россия</option><option>Казахстан</option><option>Беларусь</option><option>Армения</option><option>Узбекистан</option></datalist>
+    <div class="row-end">
+      <div class="err" id="err" role="alert"></div>
+      <button class="btn primary" type="submit" form="form">+ Добавить</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-tab">
+    <h2 id="h-tab">Расчёт по позициям</h2>
+    <div class="tablebox">
+      <table>
+        <thead><tr>
+          <th>Наименование</th><th>Страна</th><th>Кол-во</th><th>Цена ед.</th><th>Стоимость</th>
+          <th>Пошл.+акциз</th><th>Сбор+проч.</th><th>НДН</th><th>НДС</th><th>Себестоимость</th>
+          <th>Себест. ед.</th><th>Цена продажи ед.</th><th>Налог</th><th>Прибыль</th><th></th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-tot">
+    <h2 id="h-tot">Итого, <span id="valnazv">USD</span></h2>
+    <div class="totals">
+      <div class="tot"><span>Стоимость (цена поставщика)</span><b id="t-stoimost">0,00</b></div>
+      <div class="tot"><span>В бюджет: пошлина, НДС, НДН, сбор</span><b id="t-budzhet">0,00</b></div>
+      <div class="tot"><span>Выручка без НДС</span><b id="t-vyruchka">0,00</b></div>
+      <div class="tot"><span>Налог с выручки</span><b id="t-nalog">0,00</b></div>
+      <div class="tot big"><span>Себестоимость</span><b id="t-sebest">0,00</b></div>
+      <div class="tot pr"><span>Прибыль</span><b id="t-pribyl">0,00</b><small id="t-marzha"></small></div>
+    </div>
+    <div class="row-end">
+      <span class="note">Таблицу можно скопировать и вставить в Excel.</span>
+      <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span class="toast" id="toast" aria-live="polite"></span>
+        <button class="btn" type="button" id="clear">Очистить всё</button>
+        <button class="btn primary" type="button" id="copy">Скопировать для Excel</button>
+      </span>
+    </div>
+  </section>
+</div>
+
+<script>
+// Та же логика, что в raschet.py
+const EAES = ["кыргызстан","киргизия","кр","казахстан","рк","россия","рф","российская федерация","беларусь","белоруссия","рб","армения"];
+const $ = id => document.getElementById(id);
+const r2 = x => Math.round((x + (x >= 0 ? 1e-9 : -1e-9)) * 100) / 100;
+const num = s => { const t = String(s).replace(/\s/g, "").replace(",", "."); if (t === "") return 0; const n = Number(t); return Number.isFinite(n) && n >= 0 ? n : NaN; };
+const fmt = x => r2(x).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+let vid = "usluga";
+let pozicii = [];
+
+const EXAMPLE = [
+  { vid: "usluga", naim: "Dell PowerStore 3200T: Partner Support L3, Remote Monitoring", kol: 1, tsena: 48502.1, strana: "ОАЭ", ndn: 10, sverhu: true },
+  { vid: "usluga", naim: "Dell AppSync for PowerStore SW: L3 Software Support", kol: 1, tsena: 0.9, strana: "ОАЭ", ndn: 10, sverhu: true },
+];
+
+function save() { try { localStorage.setItem("pozicii", JSON.stringify(pozicii)); } catch (e) {} }
+function load() { try { const s = JSON.parse(localStorage.getItem("pozicii")); if (Array.isArray(s)) return s; } catch (e) {} return null; }
+
+function params() {
+  const p = {};
+  for (const k of ["kurs", "dostavka", "sbor", "prochie", "nds", "natsenka", "nalog"]) {
+    p[k] = num($(k).value);
+    $(k).classList.toggle("bad", Number.isNaN(p[k]));
+  }
+  p.valyuta = $("valyuta").value;
+  p.vValyute = $("vvalyute").checked;
+  p.platelshik = $("platelshik").checked;
+  p.vverh = $("vverh").checked;
+  const bezKursa = p.vValyute || p.valyuta === "KGS";
+  p.k = bezKursa ? 1 : p.kurs;
+  p.val = p.vValyute ? p.valyuta : "сом";
+  if (p.nalog >= 100) { $("nalog").classList.add("bad"); p.nalog = NaN; }
+  return p;
+}
+
+function prodazha(t, p) {
+  let tb = t.sebestEd * (1 + p.natsenka / 100) / (1 - p.nalog / 100);
+  if (p.vverh) tb = Math.ceil(tb - 1e-9);   // как ОКРУГЛВВЕРХ в Excel
+  t.tsenaBezNds = r2(tb);
+  t.tsenaProdazhi = p.platelshik ? r2(tb * (1 + p.nds / 100)) : t.tsenaBezNds;
+  t.vyruchka = r2(t.tsenaBezNds * t.kol);
+  t.nalogV = r2(t.vyruchka * p.nalog / 100);
+  t.pribyl = r2(t.vyruchka - t.nalogV - t.sebest);
+}
+
+function raschet(p) {
+  const vsego = pozicii.filter(t => t.vid === "tovar").reduce((s, t) => s + t.tsena * t.kol, 0);
+  for (const t of pozicii) {
+    const sv = t.tsena * t.kol;
+    t.poshlina = t.akcizS = t.sborS = t.prochieS = t.ndnS = 0;
+    if (t.vid === "usluga") {
+      const summa = r2(sv * p.k);
+      const st = t.ndn / 100;
+      const baza = t.sverhu ? r2(summa / (1 - st)) : summa;
+      t.ndnS = r2(baza * st);
+      t.ndsS = r2(baza * p.nds / 100);
+      t.stoimost = summa;
+      t.sebest = r2(summa + (t.sverhu ? t.ndnS : 0) + (p.platelshik ? 0 : t.ndsS));
+      t.vBudzhet = r2(t.ndnS + t.ndsS);
+    } else {
+      const dolya = vsego ? sv / vsego : 0;
+      const tam = r2(r2(sv * p.k) + r2(p.dostavka * p.k * dolya));
+      t.stoimost = tam;
+      t.poshlina = r2(tam * t.poshlinaSt / 100);
+      t.akcizS = r2((tam + t.poshlina) * t.akcizSt / 100);
+      t.sborS = r2(tam * p.sbor / 100);
+      t.ndsS = r2((tam + t.poshlina + t.akcizS + t.sborS) * p.nds / 100);
+      t.prochieS = r2(p.prochie * dolya);
+      t.sebest = r2(tam + t.poshlina + t.akcizS + t.sborS + t.prochieS + (p.platelshik ? 0 : t.ndsS));
+      t.vBudzhet = r2(t.poshlina + t.akcizS + t.ndsS + t.sborS);
+    }
+    t.sebestEd = r2(t.sebest / t.kol);
+    prodazha(t, p);
+  }
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function render() {
+  const p = params();
+  const ok = !Object.values(p).some(v => typeof v === "number" && Number.isNaN(v));
+  $("valnazv").textContent = p.val;
+  $("prochie-l").firstChild.textContent = `Брокер, склад, прочее, ${p.val}`;
+  $("kurs").disabled = p.vValyute || p.valyuta === "KGS";
+  const tb = $("tbody");
+  if (!pozicii.length) {
+    tb.innerHTML = `<tr><td class="empty" colspan="15">Позиций пока нет. Добавьте товар или услугу выше, или загрузите пример Dell.</td></tr>`;
+  }
+  if (ok) raschet(p);
+  if (pozicii.length) {
+    tb.innerHTML = pozicii.map((t, i) => {
+      const c = v => ok ? fmt(v) : "—";
+      return `<tr>
+        <td><span class="tag">${t.vid === "usluga" ? "услуга" : "товар"}</span>${esc(t.naim)}</td>
+        <td>${esc(t.strana)}</td><td>${t.kol}</td><td>${t.tsena.toLocaleString("ru-RU")}</td>
+        <td>${c(t.stoimost)}</td><td>${c(t.poshlina + t.akcizS)}</td><td>${c(t.sborS + t.prochieS)}</td>
+        <td>${c(t.ndnS)}</td><td>${c(t.ndsS)}</td><td class="cost">${c(t.sebest)}</td><td>${c(t.sebestEd)}</td>
+        <td>${c(t.tsenaProdazhi)}</td><td>${c(t.nalogV)}</td>
+        <td class="profit${ok && t.pribyl < 0 ? " neg" : ""}">${c(t.pribyl)}</td>
+        <td><button class="del" type="button" data-i="${i}" aria-label="Удалить">×</button></td>
+      </tr>`;
+    }).join("");
+  }
+  const sum = k => ok ? r2(pozicii.reduce((s, t) => s + (t[k] || 0), 0)) : 0;
+  $("t-stoimost").textContent = fmt(sum("stoimost"));
+  $("t-budzhet").textContent = fmt(sum("vBudzhet"));
+  $("t-vyruchka").textContent = fmt(sum("vyruchka"));
+  $("t-nalog").textContent = fmt(sum("nalogV"));
+  $("t-sebest").textContent = fmt(sum("sebest"));
+  $("t-pribyl").textContent = fmt(sum("pribyl"));
+  const v = sum("vyruchka");
+  $("t-marzha").textContent = v ? `маржа ${(sum("pribyl") / v * 100).toFixed(1).replace(".", ",")}% от выручки` : "";
+  save();
+}
+
+function setVid(v) {
+  vid = v;
+  $("vid-tovar").setAttribute("aria-pressed", v === "tovar");
+  $("vid-usluga").setAttribute("aria-pressed", v === "usluga");
+  document.querySelectorAll(".tovar").forEach(el => el.hidden = v !== "tovar");
+  document.querySelectorAll(".usluga").forEach(el => el.hidden = v !== "usluga");
+  checkEaes();
+}
+
+function checkEaes() {
+  const eaes = vid === "tovar" && EAES.includes($("strana").value.trim().toLowerCase());
+  if (eaes) $("poshlina").value = "0";
+  $("poshlina").disabled = eaes;
+}
+
+$("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const err = m => { $("err").textContent = m; };
+  const naim = $("naim").value.trim(), strana = $("strana").value.trim();
+  const kol = num($("kol").value), tsena = num($("tsena").value);
+  if (!naim) return err("Заполните наименование.");
+  if (!(kol > 0)) return err("Количество должно быть числом больше нуля.");
+  if (Number.isNaN(tsena) || $("tsena").value.trim() === "") return err("Укажите цену числом, например 1500 или 12,5.");
+  if (!strana) return err("Укажите страну.");
+  const t = { vid, naim, kol, tsena, strana };
+  if (vid === "usluga") {
+    t.ndn = num($("ndn").value); t.sverhu = $("sverhu").checked;
+    if (!(t.ndn >= 0 && t.ndn < 100)) return err("Ставка НДН должна быть от 0 до 99.");
+    t.poshlinaSt = t.akcizSt = 0;
+  } else {
+    t.poshlinaSt = num($("poshlina").value); t.akcizSt = num($("akciz").value);
+    if (Number.isNaN(t.poshlinaSt) || Number.isNaN(t.akcizSt)) return err("Пошлина и акциз должны быть числами.");
+  }
+  err("");
+  pozicii.push(t);
+  $("naim").value = ""; $("tsena").value = ""; $("kol").value = "1";
+  $("naim").focus();
+  render();
+});
+
+$("tbody").addEventListener("click", e => {
+  const b = e.target.closest(".del");
+  if (b) { pozicii.splice(+b.dataset.i, 1); render(); }
+});
+
+let clearArmed = false;
+$("clear").addEventListener("click", () => {
+  if (!pozicii.length) return;
+  if (!clearArmed) { clearArmed = true; $("clear").textContent = "Точно очистить?"; setTimeout(() => { clearArmed = false; $("clear").textContent = "Очистить всё"; }, 3000); return; }
+  clearArmed = false; $("clear").textContent = "Очистить всё";
+  pozicii = []; render();
+});
+
+$("example").addEventListener("click", () => {
+  pozicii = EXAMPLE.map(t => ({ ...t, poshlinaSt: 0, akcizSt: 0 }));
+  $("vvalyute").checked = true; $("valyuta").value = "USD"; $("platelshik").checked = false; $("vverh").checked = true;
+  $("natsenka").value = "10"; $("nalog").value = "2"; $("nds").value = "12";
+  render();
+});
+
+$("copy").addEventListener("click", async () => {
+  const p = params();
+  const head = ["Вид", "Наименование", "Страна", "Кол-во", "Цена ед.", `Стоимость, ${p.val}`, "Пошлина", "Акциз", "Сбор", "Прочие", "НДН", "НДС", "Себестоимость", "Себест. ед.", "Цена продажи ед.", "Выручка без НДС", "Налог с выручки", "Прибыль"];
+  const n = x => String(r2(x || 0)).replace(".", ",");
+  const rows = pozicii.map(t => [t.vid === "usluga" ? "услуга" : "товар", t.naim, t.strana, t.kol, n(t.tsena), n(t.stoimost), n(t.poshlina), n(t.akcizS), n(t.sborS), n(t.prochieS), n(t.ndnS), n(t.ndsS), n(t.sebest), n(t.sebestEd), n(t.tsenaProdazhi), n(t.vyruchka), n(t.nalogV), n(t.pribyl)]);
+  const text = [head, ...rows].map(r => r.join("\t")).join("\n");
+  try { await navigator.clipboard.writeText(text); $("toast").textContent = "Скопировано. Вставьте в Excel (Ctrl+V)."; }
+  catch (e) { $("toast").textContent = "Не удалось скопировать: выделите таблицу мышью и нажмите Ctrl+C."; }
+  setTimeout(() => $("toast").textContent = "", 4000);
+});
+
+$("vid-tovar").addEventListener("click", () => setVid("tovar"));
+$("vid-usluga").addEventListener("click", () => setVid("usluga"));
+$("strana").addEventListener("input", checkEaes);
+document.querySelectorAll("section input, section select").forEach(el => {
+  if (!el.closest("form")) el.addEventListener("input", render);
+});
+
+pozicii = load() || EXAMPLE.map(t => ({ ...t, poshlinaSt: 0, akcizSt: 0 }));
+setVid("usluga");
+render();
+</script>
+
+</body>
+</html>
