@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Калькуляция импорта</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap">
+<style>
+/* Слева узкая колонка ввода (липкая на десктопе), справа — из чего складывается цена: полоса, фраза-итог, таблица */
+:root {
+  --paper: #eef1f5;      /* фон: холодная бумага бланка */
+  --sheet: #fbfcfd;      /* лист */
+  --ink: #18212e;        /* чернила */
+  --quiet: #5b6676;      /* подписи */
+  --rule: #d5dbe3;       /* линейки */
+  --cobalt: #2747c9;     /* штемпель, действия */
+  --on-cobalt: #ffffff;
+  --supplier: #8696ab;   /* цена поставщика */
+  --customs: #7c6bc4;    /* пошлина, сбор, прочее */
+  --tax: #d9902a;        /* НДН и НДС */
+  --levy: #c25a3a;       /* налог с выручки */
+  --profit: #1f8a5b;     /* прибыль */
+  --loss: #c0352b;
+  --field: #ffffff;
+  --font: "Golos Text", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121721; --sheet: #192130; --ink: #e6ebf2; --quiet: #98a3b4; --rule: #2c3647;
+    --cobalt: #7d97ff; --on-cobalt: #0e1422; --supplier: #6f8299; --customs: #9a8ae0; --tax: #e7a446;
+    --levy: #e07a5a; --profit: #4cc48c; --loss: #ff7a6e; --field: #121a27;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #121721; --sheet: #192130; --ink: #e6ebf2; --quiet: #98a3b4; --rule: #2c3647;
+  --cobalt: #7d97ff; --on-cobalt: #0e1422; --supplier: #6f8299; --customs: #9a8ae0; --tax: #e7a446;
+  --levy: #e07a5a; --profit: #4cc48c; --loss: #ff7a6e; --field: #121a27;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 15px/1.5 var(--font); font-variant-numeric: tabular-nums;
+  padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 900px) { .page { grid-template-columns: minmax(0, 1fr); } }
+
+/* --- колонка ввода --- */
+.side { display: grid; gap: 22px; position: sticky; top: max(16px, env(safe-area-inset-top, 0px)); }
+@media (max-width: 900px) { .side { position: static; } }
+.brand h1 { font-size: 1.75rem; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; margin: 0 0 6px; }
+.brand p { margin: 0; color: var(--quiet); font-size: .92rem; }
+.block { display: grid; gap: 12px; }
+.block h2 { font-size: 1rem; font-weight: 600; margin: 0; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.wide { grid-column: 1 / -1; }
+.f { display: grid; gap: 3px; font-size: .82rem; color: var(--quiet); }
+input[type=text], select {
+  font: 500 .95rem var(--font); font-variant-numeric: tabular-nums; color: var(--ink);
+  background: var(--field); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 8px 10px; width: 100%; min-width: 0;
+}
+input[type=text]:focus-visible, select:focus-visible, button:focus-visible, .chk input:focus-visible {
+  outline: 2px solid var(--cobalt); outline-offset: 1px;
+}
+input:disabled { opacity: .45; }
+input.bad { border-color: var(--loss); }
+.chk { display: flex; align-items: flex-start; gap: 8px; font-size: .9rem; cursor: pointer; }
+.chk input { accent-color: var(--cobalt); width: 16px; height: 16px; margin: 3px 0 0; flex: none; }
+.checks { display: grid; gap: 7px; }
+.hint { margin: 0; color: var(--quiet); font-size: .8rem; }
+.kind { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--rule); border-radius: 7px; padding: 3px; background: var(--field); }
+.kind button { border: 0; border-radius: 5px; background: transparent; color: var(--quiet); padding: 7px 6px; font: 500 .86rem var(--font); white-space: nowrap; cursor: pointer; }
+.kind button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.add-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.err { color: var(--loss); font-size: .85rem; }
+.btn { border: 1px solid var(--rule); background: transparent; color: var(--ink); border-radius: 7px; padding: 8px 14px; font: 500 .9rem var(--font); cursor: pointer; }
+.btn:hover { border-color: var(--quiet); }
+.btn.go { background: var(--cobalt); border-color: var(--cobalt); color: var(--on-cobalt); font-weight: 600; }
+.btn.go:hover { filter: brightness(1.08); }
+hr.sep { border: 0; border-top: 1px solid var(--rule); margin: 0; }
+
+/* --- лист калькуляции --- */
+.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; padding: 28px clamp(16px, 3vw, 36px) 24px; display: grid; gap: 26px; min-width: 0; }
+.sheet-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: baseline; justify-content: space-between; }
+.sheet-head h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+.sheet-head .cur { color: var(--quiet); font-weight: 400; }
+
+/* фраза-итог */
+.verdict { margin: 0; font-size: clamp(1.1rem, 1.9vw, 1.45rem); line-height: 1.45; max-width: 46ch; text-wrap: pretty; }
+.verdict b { font-weight: 700; white-space: nowrap; }
+.verdict .p { color: var(--profit); }
+.verdict .n { color: var(--loss); }
+
+/* полоса: из чего складывается выручка — главный элемент страницы */
+.build { display: grid; gap: 12px; }
+.bar { display: flex; height: 56px; border-radius: 8px; overflow: hidden; background: var(--rule); }
+.bar span { display: block; min-width: 0; height: 100%; }
+@media (prefers-reduced-motion: no-preference) { .bar span { transition: flex-basis .35s ease; } }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px 18px; margin: 0; padding: 0; list-style: none; }
+.legend li { display: grid; gap: 1px; padding-left: 12px; border-left: 4px solid var(--c); }
+.legend .lname { font-size: .82rem; color: var(--quiet); }
+.legend .lval { font-size: 1.05rem; font-weight: 600; }
+.legend .lpct { font-size: .78rem; color: var(--quiet); }
+
+/* таблица */
+.tablebox { overflow-x: auto; margin: 0 -4px; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+th, td { padding: 9px 6px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th { font-size: .78rem; font-weight: 500; color: var(--quiet); vertical-align: bottom; }
+th:first-child, td:first-child { text-align: left; }
+td:first-child { white-space: normal; min-width: 190px; max-width: 280px; }
+td .meta { display: block; color: var(--quiet); font-size: .78rem; }
+td.cost { font-weight: 600; }
+td.prof { color: var(--profit); font-weight: 600; }
+td.prof.neg { color: var(--loss); }
+td .del { border: 0; background: none; color: var(--quiet); cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 2px 6px; border-radius: 4px; }
+td .del:hover { color: var(--loss); }
+.empty { color: var(--quiet); padding: 22px 4px; text-align: left !important; white-space: normal !important; }
+.foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.foot .note { color: var(--quiet); font-size: .82rem; }
+.foot .acts { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.toast { color: var(--profit); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="page">
+  <aside class="side">
+    <div class="brand">
+      <h1>Калькуляция импорта</h1>
+      <p>Себестоимость, налоги и цена продажи для товаров и услуг иностранных поставщиков.</p>
+    </div>
+
+    <section class="block" aria-labelledby="h-par">
+      <h2 id="h-par">Условия сделки</h2>
+      <div class="fields">
+        <label class="f">Валюта
+          <select id="valyuta"><option>USD</option><option>EUR</option><option>CNY</option><option>RUB</option><option>KZT</option><option>KGS</option></select>
+        </label>
+        <label class="f">Курс НБКР, сом<input type="text" id="kurs" inputmode="decimal" placeholder="например 87,5"></label>
+        <label class="f">Наценка, %<input type="text" id="natsenka" inputmode="decimal" value="10"></label>
+        <label class="f">Налог с выручки, %<input type="text" id="nalog" inputmode="decimal" value="2"></label>
+        <label class="f">НДС, %<input type="text" id="nds" inputmode="decimal" value="12"></label>
+        <label class="f">Тамож. сбор, %<input type="text" id="sbor" inputmode="decimal" value="0,4"></label>
+        <label class="f">Доставка<input type="text" id="dostavka" inputmode="decimal" value="0"></label>
+        <label class="f" id="prochie-l">Прочие расходы<input type="text" id="prochie" inputmode="decimal" value="0"></label>
+      </div>
+      <div class="checks">
+        <label class="chk"><input type="checkbox" id="vvalyute" checked> Считать в валюте, без курса</label>
+        <label class="chk"><input type="checkbox" id="platelshik"> Мы плательщик НДС (НДС к зачёту)</label>
+        <label class="chk"><input type="checkbox" id="vverh" checked> Округлять цену вверх до целого</label>
+      </div>
+      <p class="hint">Доставка — до границы КР, в валюте инвойса. Прочие расходы — брокер, склад, доставка по КР. Налог с выручки — единый налог или налог с продаж. Ставки сверяйте с НК КР.</p>
+    </section>
+
+    <hr class="sep">
+
+    <section class="block" aria-labelledby="h-add">
+      <h2 id="h-add">Новая позиция</h2>
+      <div class="kind" role="group" aria-label="Что добавляем">
+        <button type="button" id="vid-tovar" aria-pressed="false">Товар</button>
+        <button type="button" id="vid-usluga" aria-pressed="true">Услуга нерезидента</button>
+      </div>
+      <form id="form" class="fields" novalidate>
+        <label class="f wide">Наименование<input type="text" id="naim" autocomplete="off" placeholder="например, техподдержка Dell на 3 года"></label>
+        <label class="f">Количество<input type="text" id="kol" inputmode="decimal" value="1"></label>
+        <label class="f">Цена за единицу<input type="text" id="tsena" inputmode="decimal"></label>
+        <label class="f wide">Страна поставщика<input type="text" id="strana" list="strany" autocomplete="off"></label>
+        <label class="f tovar">Пошлина, %<input type="text" id="poshlina" inputmode="decimal" value="0"></label>
+        <label class="f tovar">Акциз, %<input type="text" id="akciz" inputmode="decimal" value="0"></label>
+        <label class="f usluga">НДН, %<input type="text" id="ndn" inputmode="decimal" value="10"></label>
+        <label class="chk usluga" style="align-self:end;padding-bottom:9px"><input type="checkbox" id="sverhu" checked> НДН сверху, за наш счёт</label>
+      </form>
+      <datalist id="strany"><option>Китай</option><option>Турция</option><option>ОАЭ</option><option>США</option><option>Германия</option><option>Корея</option><option>Индия</option><option>Россия</option><option>Казахстан</option><option>Беларусь</option><option>Армения</option><option>Узбекистан</option></datalist>
+      <div class="add-row">
+        <span class="err" id="err" role="alert"></span>
+        <button class="btn go" type="submit" form="form">Добавить в расчёт</button>
+      </div>
+    </section>
+  </aside>
+
+  <main class="sheet" aria-labelledby="h-sheet">
+    <div class="sheet-head">
+      <h2 id="h-sheet">Расчёт <span class="cur">в <span id="valnazv">USD</span></span></h2>
+      <button class="btn" id="example" type="button">Показать пример Dell</button>
+    </div>
+
+    <p class="verdict" id="verdict"></p>
+
+    <div class="build" aria-label="Из чего складывается выручка">
+      <div class="bar" id="bar"></div>
+      <ul class="legend" id="legend"></ul>
+    </div>
+
+    <div class="tablebox">
+      <table>
+        <thead><tr>
+          <th>Позиция</th><th>Стоимость</th>
+          <th>Пошлина,<br>сбор, прочее</th><th>НДН</th><th>НДС</th><th>Себесто&shy;имость</th>
+          <th>Продажа<br>за ед.</th><th>Налог</th><th>Прибыль</th><th><span hidden>Удалить</span></th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="foot">
+      <span class="note">Таблицу можно скопировать и вставить в Excel.</span>
+      <span class="acts">
+        <span class="toast" id="toast" aria-live="polite"></span>
+        <button class="btn" type="button" id="clear">Очистить</button>
+        <button class="btn go" type="button" id="copy">Скопировать для Excel</button>
+      </span>
+    </div>
+  </main>
+</div>
+
+<script>
+// Формулы те же, что в raschet.py
+const EAES = ["кыргызстан","киргизия","кр","казахстан","рк","россия","рф","российская федерация","беларусь","белоруссия","рб","армения"];
+const $ = id => document.getElementById(id);
+const r2 = x => Math.round((x + (x >= 0 ? 1e-9 : -1e-9)) * 100) / 100;
+const num = s => { const t = String(s).replace(/\s/g, "").replace(",", "."); if (t === "") return 0; const n = Number(t); return Number.isFinite(n) && n >= 0 ? n : NaN; };
+const fmt = x => r2(x).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt0 = x => Math.round(x).toLocaleString("ru-RU");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let vid = "usluga";
+let pozicii = [];
+
+const EXAMPLE = [
+  { vid: "usluga", naim: "Dell PowerStore 3200T: Partner Support L3, Remote Monitoring", kol: 1, tsena: 48502.1, strana: "ОАЭ", ndn: 10, sverhu: true },
+  { vid: "usluga", naim: "Dell AppSync for PowerStore SW: L3 Software Support", kol: 1, tsena: 0.9, strana: "ОАЭ", ndn: 10, sverhu: true },
+];
+
+function save() { try { localStorage.setItem("pozicii", JSON.stringify(pozicii)); } catch (e) {} }
+function load() { try { const s = JSON.parse(localStorage.getItem("pozicii")); if (Array.isArray(s)) return s; } catch (e) {} return null; }
+
+function params() {
+  const p = {};
+  for (const k of ["kurs", "dostavka", "sbor", "prochie", "nds", "natsenka", "nalog"]) {
+    p[k] = num($(k).value);
+    $(k).classList.toggle("bad", Number.isNaN(p[k]));
+  }
+  p.valyuta = $("valyuta").value;
+  p.vValyute = $("vvalyute").checked;
+  p.platelshik = $("platelshik").checked;
+  p.vverh = $("vverh").checked;
+  p.k = (p.vValyute || p.valyuta === "KGS") ? 1 : p.kurs;
+  p.val = p.vValyute ? p.valyuta : "сом";
+  if (p.nalog >= 100) { $("nalog").classList.add("bad"); p.nalog = NaN; }
+  return p;
+}
+
+function prodazha(t, p) {
+  let tb = t.sebestEd * (1 + p.natsenka / 100) / (1 - p.nalog / 100);
+  if (p.vverh) tb = Math.ceil(tb - 1e-9);   // как ОКРУГЛВВЕРХ в Excel
+  t.tsenaBezNds = r2(tb);
+  t.tsenaProdazhi = p.platelshik ? r2(tb * (1 + p.nds / 100)) : t.tsenaBezNds;
+  t.vyruchka = r2(t.tsenaBezNds * t.kol);
+  t.nalogV = r2(t.vyruchka * p.nalog / 100);
+  t.pribyl = r2(t.vyruchka - t.nalogV - t.sebest);
+}
+
+function raschet(p) {
+  const vsego = pozicii.filter(t => t.vid === "tovar").reduce((s, t) => s + t.tsena * t.kol, 0);
+  for (const t of pozicii) {
+    const sv = t.tsena * t.kol;
+    t.poshlina = t.akcizS = t.sborS = t.prochieS = t.ndnS = 0;
+    if (t.vid === "usluga") {
+      const summa = r2(sv * p.k);
+      const st = t.ndn / 100;
+      const baza = t.sverhu ? r2(summa / (1 - st)) : summa;
+      t.ndnS = r2(baza * st);
+      t.ndsS = r2(baza * p.nds / 100);
+      t.stoimost = summa;
+      t.ndnVSebest = t.sverhu ? t.ndnS : 0;
+      t.sebest = r2(summa + t.ndnVSebest + (p.platelshik ? 0 : t.ndsS));
+      t.vBudzhet = r2(t.ndnS + t.ndsS);
+    } else {
+      const dolya = vsego ? sv / vsego : 0;
+      const tam = r2(r2(sv * p.k) + r2(p.dostavka * p.k * dolya));
+      t.stoimost = tam;
+      t.poshlina = r2(tam * t.poshlinaSt / 100);
+      t.akcizS = r2((tam + t.poshlina) * t.akcizSt / 100);
+      t.sborS = r2(tam * p.sbor / 100);
+      t.ndsS = r2((tam + t.poshlina + t.akcizS + t.sborS) * p.nds / 100);
+      t.prochieS = r2(p.prochie * dolya);
+      t.ndnVSebest = 0;
+      t.sebest = r2(tam + t.poshlina + t.akcizS + t.sborS + t.prochieS + (p.platelshik ? 0 : t.ndsS));
+      t.vBudzhet = r2(t.poshlina + t.akcizS + t.ndsS + t.sborS);
+    }
+    t.tamozhnya = r2(t.poshlina + t.akcizS + t.sborS + t.prochieS);
+    t.sebestEd = r2(t.sebest / t.kol);
+    prodazha(t, p);
+  }
+}
+
+function renderBuild(p, ok) {
+  const S = k => r2(pozicii.reduce((s, t) => s + (t[k] || 0), 0));
+  const bar = $("bar"), legend = $("legend"), verdict = $("verdict");
+  if (!ok || !pozicii.length) {
+    bar.innerHTML = ""; legend.innerHTML = "";
+    verdict.textContent = !pozicii.length
+      ? "Добавьте позицию слева, и здесь появится, из чего складывается цена."
+      : "Проверьте поля, подсвеченные красным: там должно быть число.";
+    return;
+  }
+  const nds = p.platelshik ? 0 : S("ndsS");
+  const parts = [
+    { name: "Цена поставщика", v: S("stoimost"), c: "var(--supplier)" },
+    { name: "Пошлина, сбор, прочее", v: S("tamozhnya"), c: "var(--customs)" },
+    { name: "НДН и НДС", v: r2(S("ndnVSebest") + nds), c: "var(--tax)" },
+    { name: "Налог с выручки", v: S("nalogV"), c: "var(--levy)" },
+    { name: "Прибыль", v: S("pribyl"), c: "var(--profit)" },
+  ].filter(x => x.v > 0);
+  const vyr = S("vyruchka"), sebest = S("sebest"), pribyl = S("pribyl");
+  const total = parts.reduce((s, x) => s + x.v, 0) || 1;
+  bar.innerHTML = parts.map(x => `<span style="flex:0 0 ${(x.v / total * 100).toFixed(3)}%;background:${x.c}" title="${x.name}: ${fmt(x.v)}"></span>`).join("");
+  legend.innerHTML = parts.map(x => `<li style="--c:${x.c}"><span class="lname">${x.name}</span><span class="lval">${fmt(x.v)}</span><span class="lpct">${(x.v / (vyr || total) * 100).toFixed(1).replace(".", ",")}% от выручки</span></li>`).join("");
+  const val = esc(p.val);
+  const marzha = vyr ? (pribyl / vyr * 100).toFixed(1).replace(".", ",") : "0";
+  verdict.innerHTML = pribyl >= 0
+    ? `Себестоимость <b>${fmt0(sebest)} ${val}</b>, продаём за <b>${fmt0(vyr)} ${val}</b>${p.platelshik ? " без НДС" : ""}. После налога с выручки остаётся <b class="p">${fmt(pribyl)} ${val}</b> прибыли, это ${marzha}% от выручки.`
+    : `Себестоимость <b>${fmt0(sebest)} ${val}</b> выше выручки <b>${fmt0(vyr)} ${val}</b>: убыток <b class="n">${fmt(-pribyl)} ${val}</b>. Поднимите наценку.`;
+}
+
+function render() {
+  const p = params();
+  const ok = !Object.values(p).some(v => typeof v === "number" && Number.isNaN(v));
+  $("valnazv").textContent = p.val;
+  $("prochie-l").firstChild.textContent = `Прочие расходы, ${p.val}`;
+  $("kurs").disabled = p.vValyute || p.valyuta === "KGS";
+  if (ok) raschet(p);
+  const tb = $("tbody");
+  if (!pozicii.length) {
+    tb.innerHTML = `<tr><td class="empty" colspan="10">Пока пусто. Заполните «Новая позиция» слева или нажмите «Показать пример Dell».</td></tr>`;
+  } else {
+    const c = v => ok ? fmt(v) : "—";
+    tb.innerHTML = pozicii.map((t, i) => `<tr>
+      <td>${esc(t.naim)}<span class="meta">${t.vid === "usluga" ? "услуга" : "товар"}, ${esc(t.strana)}, ${t.kol.toLocaleString("ru-RU")} × ${t.tsena.toLocaleString("ru-RU")}</span></td>
+      <td>${c(t.stoimost)}</td><td>${c(t.tamozhnya)}</td><td>${c(t.ndnS)}</td><td>${c(t.ndsS)}</td>
+      <td class="cost">${c(t.sebest)}</td><td>${c(t.tsenaProdazhi)}</td><td>${c(t.nalogV)}</td>
+      <td class="prof${ok && t.pribyl < 0 ? " neg" : ""}">${c(t.pribyl)}</td>
+      <td><button class="del" type="button" data-i="${i}" aria-label="Удалить ${esc(t.naim)}">×</button></td>
+    </tr>`).join("");
+  }
+  renderBuild(p, ok);
+  save();
+}
+
+function setVid(v) {
+  vid = v;
+  $("vid-tovar").setAttribute("aria-pressed", v === "tovar");
+  $("vid-usluga").setAttribute("aria-pressed", v === "usluga");
+  document.querySelectorAll(".tovar").forEach(el => el.hidden = v !== "tovar");
+  document.querySelectorAll(".usluga").forEach(el => el.hidden = v !== "usluga");
+  checkEaes();
+}
+
+function checkEaes() {
+  const eaes = vid === "tovar" && EAES.includes($("strana").value.trim().toLowerCase());
+  if (eaes) $("poshlina").value = "0";
+  $("poshlina").disabled = eaes;
+}
+
+$("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const err = m => { $("err").textContent = m; };
+  const naim = $("naim").value.trim(), strana = $("strana").value.trim();
+  const kol = num($("kol").value), tsena = num($("tsena").value);
+  if (!naim) return err("Впишите наименование.");
+  if (!(kol > 0)) return err("Количество — число больше нуля.");
+  if (Number.isNaN(tsena) || $("tsena").value.trim() === "") return err("Цена — число, например 1500 или 12,5.");
+  if (!strana) return err("Укажите страну поставщика.");
+  const t = { vid, naim, kol, tsena, strana };
+  if (vid === "usluga") {
+    t.ndn = num($("ndn").value); t.sverhu = $("sverhu").checked;
+    if (!(t.ndn >= 0 && t.ndn < 100)) return err("НДН — от 0 до 99%.");
+    t.poshlinaSt = t.akcizSt = 0;
+  } else {
+    t.poshlinaSt = num($("poshlina").value); t.akcizSt = num($("akciz").value);
+    if (Number.isNaN(t.poshlinaSt) || Number.isNaN(t.akcizSt)) return err("Пошлина и акциз — числа.");
+  }
+  err("");
+  pozicii.push(t);
+  $("naim").value = ""; $("tsena").value = ""; $("kol").value = "1";
+  $("naim").focus();
+  render();
+});
+
+$("tbody").addEventListener("click", e => {
+  const b = e.target.closest(".del");
+  if (b) { pozicii.splice(+b.dataset.i, 1); render(); }
+});
+
+let clearArmed = false;
+$("clear").addEventListener("click", () => {
+  if (!pozicii.length) return;
+  if (!clearArmed) { clearArmed = true; $("clear").textContent = "Точно очистить?"; setTimeout(() => { clearArmed = false; $("clear").textContent = "Очистить"; }, 3000); return; }
+  clearArmed = false; $("clear").textContent = "Очистить";
+  pozicii = []; render();
+});
+
+$("example").addEventListener("click", () => {
+  pozicii = EXAMPLE.map(t => ({ ...t, poshlinaSt: 0, akcizSt: 0 }));
+  $("vvalyute").checked = true; $("valyuta").value = "USD"; $("platelshik").checked = false; $("vverh").checked = true;
+  $("natsenka").value = "10"; $("nalog").value = "2"; $("nds").value = "12";
+  render();
+});
+
+$("copy").addEventListener("click", async () => {
+  const p = params();
+  const head = ["Вид", "Наименование", "Страна", "Кол-во", "Цена ед.", `Стоимость, ${p.val}`, "Пошлина", "Акциз", "Сбор", "Прочие", "НДН", "НДС", "Себестоимость", "Себест. ед.", "Цена продажи ед.", "Выручка без НДС", "Налог с выручки", "Прибыль"];
+  const n = x => String(r2(x || 0)).replace(".", ",");
+  const rows = pozicii.map(t => [t.vid === "usluga" ? "услуга" : "товар", t.naim, t.strana, t.kol, n(t.tsena), n(t.stoimost), n(t.poshlina), n(t.akcizS), n(t.sborS), n(t.prochieS), n(t.ndnS), n(t.ndsS), n(t.sebest), n(t.sebestEd), n(t.tsenaProdazhi), n(t.vyruchka), n(t.nalogV), n(t.pribyl)]);
+  const text = [head, ...rows].map(r => r.join("\t")).join("\n");
+  try { await navigator.clipboard.writeText(text); $("toast").textContent = "Скопировано, вставьте в Excel через Ctrl+V."; }
+  catch (e) { $("toast").textContent = "Не скопировалось: выделите таблицу мышью и нажмите Ctrl+C."; }
+  setTimeout(() => $("toast").textContent = "", 4000);
+});
+
+$("vid-tovar").addEventListener("click", () => setVid("tovar"));
+$("vid-usluga").addEventListener("click", () => setVid("usluga"));
+$("strana").addEventListener("input", checkEaes);
+document.querySelectorAll(".side input, .side select").forEach(el => {
+  if (!el.closest("form")) el.addEventListener("input", render);
+});
+
+pozicii = load() || EXAMPLE.map(t => ({ ...t, poshlinaSt: 0, akcizSt: 0 }));
+setVid("usluga");
+render();
+</script>
+
+</body>
+</html>
